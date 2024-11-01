@@ -14,8 +14,6 @@ header("Content-Type: application/json");
 $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
 $dotenv->load();
 
-$jwt_secret_key = $_ENV['JWT_SECRET'];
-
 try {
     // Establish a connection to the database
     $database = new Database();
@@ -26,51 +24,40 @@ try {
     exit();
 }
 
-// Function to get the Authorization token
-function getAuthToken()
-{
-    $headers = apache_request_headers();
-    return $headers['Authorization'] ?? null;
-}
-
-// Function to check if the user is an admin
-function isAdmin($token, $jwt_secret_key)
-{
-    try {
-        // Decode the JWT token
-        $decoded = JWT::decode($token, new Key($jwt_secret_key, 'HS256'));
-
-        // Check if the user has admin role_id = 3
-        return isset($decoded->data->role_id) && $decoded->data->role_id == 3;
-    } catch (Exception $e) {
-        error_log("Error verifying admin token: " . $e->getMessage());
-        return false;
-    }
-}
-
-// Get the token
-$authHeader = getAuthToken();
-if (!$authHeader) {
-    http_response_code(401); // Unauthorized
-    echo json_encode(['status' => 'error', 'message' => 'Authorization header missing']);
+// Get the JWT token from the Authorization header
+$headers = apache_request_headers();
+if (!isset($headers['Authorization'])) {
+    http_response_code(401);  // Unauthorized
+    echo json_encode(['status' => 'error', 'message' => 'Authorization token not found']);
     exit();
 }
 
-$token = str_replace('Bearer ', '', $authHeader);
+$jwt = str_replace('Bearer ', '', $headers['Authorization']);
 
-// Check if the user is an admin
-if (!isAdmin($token, $jwt_secret_key)) {
+try {
+    // Decode the JWT
+    $decoded = JWT::decode($jwt, new Key($_ENV['JWT_SECRET'], 'HS256'));
+    $userRoleId = $decoded->data->role_id; // Get the user's role from the token
+} catch (Exception $e) {
+    http_response_code(401);  // Unauthorized
+    echo json_encode(['status' => 'error', 'message' => 'Invalid token: ' . $e->getMessage()]);
+    exit();
+}
+
+// Check if the user is an admin (role_id 3)
+if ($userRoleId !== 3) {
     http_response_code(403); // Forbidden
-    echo json_encode(['status' => 'error', 'message' => 'Access denied. Admin access only.']);
+    echo json_encode(['status' => 'error', 'message' => 'Access denied: Admin privileges required.']);
     exit();
 }
 
 // Get the input data
-$data = json_decode(file_get_contents("php://input"), true);
-$role_id = $data['role_id'] ?? null;
-$email = $data['email'] ?? null; // Changed to email
+$request = json_decode(file_get_contents('php://input'), true);
 
-// Validate required fields
+// Validate input data
+$email = $request['email'] ?? null;
+$role_id = $request['role_id'] ?? null;
+
 if (!$email || !$role_id) {
     http_response_code(400); // Bad Request
     echo json_encode(['status' => 'error', 'message' => 'Email and role ID are required']);
@@ -90,16 +77,9 @@ if (!$user) {
 }
 
 // Get the user ID, current role, and verification status from the result
-$hashed_user_id = $user['user_id'];
-$current_role_id = $user['role_id'];
+$userId = $user['user_id'];
+$currentRoleId = $user['role_id'];
 $is_verified = $user['is_verified'];
-
-// Check if the current role is admin (role_id = 3)
-if ($current_role_id == 3) {
-    http_response_code(403); // Forbidden
-    echo json_encode(['status' => 'error', 'message' => 'Cannot change the role of an admin account']);
-    exit();
-}
 
 // Check if the user is verified
 if ($is_verified != 1) {
@@ -108,7 +88,14 @@ if ($is_verified != 1) {
     exit();
 }
 
-// Assign the role using the User class
+// Check if the current role is admin (role_id = 3)
+if ($currentRoleId == 3) {
+    http_response_code(403); // Forbidden
+    echo json_encode(['status' => 'error', 'message' => 'Cannot change the role of an admin account']);
+    exit();
+}
+
+// Proceed to assign the new role
 $userClass = new User($db);
 $result = $userClass->assignRole($email, $role_id); // Pass email instead of user ID
 
