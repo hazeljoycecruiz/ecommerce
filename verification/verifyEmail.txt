@@ -1,0 +1,66 @@
+<?php
+require_once __DIR__ . '/../src/class/verify.php';  
+require_once __DIR__ . '/../src/database/db_conn.php';
+
+header('Content-Type: application/json');
+
+// Initialize database connection
+$database = new Database();
+$db = $database->connect();
+
+// Get the JSON body
+$data = json_decode(file_get_contents('php://input'), true);
+
+// Check if required fields are present
+if (!isset($data['email']) || empty($data['email']) || 
+    !isset($data['verification_code']) || empty($data['verification_code'])) {
+    http_response_code(400);
+    echo json_encode(['message' => 'Email and verification code are required.']);
+    exit;
+}
+
+// Prepare to verify the email
+$email = $data['email'];
+$verificationCode = $data['verification_code'];
+
+// Step 1: Get user ID from email
+$userQuery = $db->prepare("SELECT user_id FROM users WHERE email = ?");
+$userQuery->execute([$email]);
+$userResult = $userQuery->fetch();
+
+if (!$userResult) {
+    http_response_code(400);
+    echo json_encode(['message' => 'Invalid email address.']);
+    exit;
+}
+
+$userId = $userResult['user_id'];
+
+// Step 2: Check if the verification code exists and is valid
+$stmt = $db->prepare("
+    SELECT verification_code, expires_at 
+    FROM user_verifications 
+    WHERE user_id = ? 
+    AND verification_code = ?
+");
+$stmt->execute([$userId, $verificationCode]);
+$result = $stmt->fetch();
+
+if ($result) {
+    // Check if the verification code is still valid
+    if (strtotime($result['expires_at']) > time()) {
+        // Code is valid; update the user's status to verified
+        $updateStmt = $db->prepare("UPDATE users SET is_verified = 1 WHERE user_id = ?");
+        $updateStmt->execute([$userId]);
+
+        http_response_code(200);
+        echo json_encode(['message' => 'Email verified successfully.']);
+    } else {
+        http_response_code(400);
+        echo json_encode(['message' => 'Verification code has expired.']);
+    }
+} else {
+    http_response_code(400);
+    echo json_encode(['message' => 'Invalid verification code.']);
+}
+?>
