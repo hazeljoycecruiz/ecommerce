@@ -105,14 +105,13 @@ try {
         $fullName = $data['first_name'] . ' ' . $data['last_name'];
 
         $emailService = new EmailService($db);
-        if ($emailService->sendVerificationEmail($data['email'], $token)) {
+        if ($emailService->sendVerificationEmail($data['email'], $userId)) {
             http_response_code(201);
             echo json_encode([
                 'message' => 'User registered successfully. Verification email sent.',
                 'user' => [
                     'name' => $fullName,
-                    'email' => $data['email'],
-                    'role_id' => $role_id
+                    'email' => $data['email']
                 ]
             ]);
         } else {

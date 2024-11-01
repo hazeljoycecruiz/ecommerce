@@ -57,7 +57,6 @@ $result = $login->loginUser();
 // Handle login result
 if ($result['success']) {
     $token = $result['token'];
-    $userId = $result['data']['id'] ?? null; 
     $fullName = $result['name'] ?? '';    
     
     // Return response with JWT token and user info
@@ -66,7 +65,6 @@ if ($result['success']) {
         'message' => 'Login successful',
         'token' => $token,
         'user' => [
-            'id' => $userId,
             'name' => $fullName,
             'email' => $data['email']
         ]

@@ -70,7 +70,7 @@ class Login {
                 }
             } else {
                 error_log('User not found for email: ' . $this->email);
-                return ['success' => false, 'message' => 'User not found'];
+                return ['success' => false, 'message' => 'User not verified.'];
             }
         } catch (PDOException $e) {
              error_log('Database error: ' . $e->getMessage());
