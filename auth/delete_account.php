@@ -26,7 +26,7 @@ $password = $data['password'];
 
 try {
     // Prepare a SELECT query to find the user by email
-    $query = 'SELECT user_id, password, is_verified FROM users WHERE email = :email';
+    $query = 'SELECT user_id, password, is_verified, role_id FROM users WHERE email = :email'; // Include role_id in the select
     $stmt = $db->prepare($query);
     $stmt->bindParam(':email', $email);
     $stmt->execute();
@@ -46,6 +46,13 @@ try {
         if ($user['is_verified'] != 1) { // Assuming '1' indicates verified
             http_response_code(403); // Forbidden
             echo json_encode(['status' => 'error', 'message' => 'Account not verified.']);
+            exit;
+        }
+
+        // Check if the user is an admin (role_id 3)
+        if ($user['role_id'] === 3) { // Assuming 3 is the role_id for admin
+            http_response_code(403); // Forbidden
+            echo json_encode(['status' => 'error', 'message' => 'Admin cannot be deleted.']);
             exit;
         }
 

@@ -1,6 +1,17 @@
 <?php
+require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/database/db_conn.php';
 require_once __DIR__ . '/../src/class/User.php';
+
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+use Dotenv\Dotenv;
+
+header('Content-Type: application/json');
+
+// Load environment variables
+$dotenv = Dotenv::createImmutable(__DIR__ . '/../');
+$dotenv->load();
 
 class ListUserRole
 {
@@ -12,8 +23,46 @@ class ListUserRole
         $this->pdo = $db->connect();
     }
 
+    private function getAuthToken()
+    {
+        // Check if the token is provided in the Authorization header
+        $headers = apache_request_headers();
+        return $headers['Authorization'] ?? null;
+    }
+
+    private function isAdmin($token)
+    {
+        try {
+            // Decode the JWT
+            $decoded = JWT::decode($token, new Key($_ENV['JWT_SECRET'], 'HS256'));
+
+            // Check if the user has admin role_id = 3
+            return isset($decoded->data->role_id) && $decoded->data->role_id == 3;
+        } catch (Exception $e) {
+            error_log("Error verifying admin token: " . $e->getMessage());
+            return false;
+        }
+    }
+
     public function listUserRoles()
     {
+        $token = $this->getAuthToken();
+
+        // Check if token is provided and if the user is an admin
+        if (!$token) {
+            http_response_code(401);  // Unauthorized
+            $this->respond(['success' => false, 'message' => 'Authorization token not found'], 401);
+            return;
+        }
+
+        $token = str_replace('Bearer ', '', $token);  // Remove "Bearer" prefix if present
+
+        if (!$this->isAdmin($token)) {
+            // Respond with a 403 Forbidden status if the user is not an admin
+            $this->respond(['success' => false, 'message' => 'Access denied. Admin access only.'], 403);
+            return;
+        }
+
         try {
             // Prepare the query to fetch all users and their roles
             $query = "SELECT u.user_id, u.first_name, u.last_name, r.role_name 
@@ -38,7 +87,6 @@ class ListUserRole
             $this->respond(['success' => false, 'message' => "An error occurred while fetching user roles.", 'error' => $e->getMessage()]);
         }
     }
-
 
     private function respond(array $data, int $statusCode = 200)
     {

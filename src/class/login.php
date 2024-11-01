@@ -66,7 +66,7 @@ class Login {
                     ];
                 } else {
                     error_log('Password verification failed for user: ' . $this->email);
-                    return ['success' => false, 'message' => 'Invalid credentials'];
+                    return ['success' => false, 'message' => 'Invalid Password'];
                 }
             } else {
                 error_log('User not found for email: ' . $this->email);

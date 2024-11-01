@@ -53,11 +53,11 @@ class User
     }
     
 
-    // Function to assign a role to a user
-    public function assignRole($hashed_user_id, $role_id)
+    // Function to assign a role to a user based on email
+    public function assignRole($email, $role_id)
     {
         // Define role ID mappings
-        $valid_roles = [1, 2, 3]; // buyer = 1, seller = 2, admin = 3
+        $valid_roles = [1, 2]; // buyer = 1, seller = 2
 
         // Validate role ID
         if (!in_array($role_id, $valid_roles)) {
@@ -65,21 +65,34 @@ class User
         }
 
         try {
-            // Fetch current role of the user
-            $query = "SELECT role_id FROM users WHERE user_id = :user_id";
+            // Fetch user ID, current role, and verification status based on email
+            $query = "SELECT user_id, role_id, is_verified FROM users WHERE email = :email";
             $stmt = $this->pdo->prepare($query);
-            $stmt->bindParam(':user_id', $hashed_user_id, PDO::PARAM_STR);
+            $stmt->bindParam(':email', $email, PDO::PARAM_STR);
             $stmt->execute();
-            $current_role_id = $stmt->fetchColumn();
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            // Check if role is already assigned
-            if ($current_role_id == $role_id) {
-                return ['success' => false, 'message' => 'Role already assigned to the user'];
+            if (!$user) {
+                return ['success' => false, 'message' => 'User not found'];
             }
 
-            // Only allow role elevation from buyer (1) to seller (2) or admin (3)
-            if ($current_role_id == 1 && $role_id == 3) {
-                return ['success' => false, 'message' => 'Unauthorized role elevation to admin'];
+            $hashed_user_id = $user['user_id'];
+            $current_role_id = $user['role_id'];
+            $is_verified = $user['is_verified'];
+
+            // Prevent changing the role if the user is an admin
+            if ($current_role_id == 3) {
+                return ['success' => false, 'message' => 'Cannot change the role of an admin account'];
+            }
+
+            // Check if the user is verified
+            if ($is_verified != 1) {
+                return ['success' => false, 'message' => 'Cannot assign a role to an unverified account'];
+            }
+
+            // Check if the role is already assigned
+            if ($current_role_id == $role_id) {
+                return ['success' => false, 'message' => 'Role already assigned to the user'];
             }
 
             // Update the user's role
@@ -100,8 +113,7 @@ class User
     }
 
 
-
-    public function listUserRoles()
+    public function getUserRoles()
     {
         try {
             // Prepare the query to fetch all users and their roles
@@ -109,30 +121,17 @@ class User
                       FROM users u 
                       LEFT JOIN roles r ON u.role_id = r.role_id";
             $stmt = $this->pdo->prepare($query);
-
+    
             // Execute the query
             $stmt->execute();
-
+    
             // Fetch all user-role pairs
-            $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            if ($users) {
-                // If users are found, return them with success status
-                return ['success' => true, 'data' => $users];
-            } else {
-                // No users found
-                return ['success' => false, 'message' => 'No users or roles found.'];
-            }
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
         } catch (PDOException $e) {
             // Log the detailed error
             error_log("Error fetching all user roles: " . $e->getMessage());
-
-            // Return a detailed error message for debugging purposes
-            return [
-                'success' => false,
-                'message' => 'An error occurred while fetching user roles.',
-                'error' => $e->getMessage() // Include error message for better debugging
-            ];
+            return false; // Return false to indicate an error occurred
         }
     }
 
